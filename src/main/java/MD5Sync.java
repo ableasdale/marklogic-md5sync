@@ -27,7 +27,7 @@ public class MD5Sync {
 
 
         ResultSequence rs = null;
-        Request request = sourceSession.newAdhocQuery(batchQuery.replace("(),", "\""+uri+"\","));
+        Request request = sourceSession.newAdhocQuery(batchQuery.replace("(),", String.format("\"%s\",", uri)));
         try {
             rs = sourceSession.submitRequest(request);
         } catch (RequestException e) {
@@ -65,6 +65,8 @@ public class MD5Sync {
             sourceSession.close();
             targetSession.close();
 
+            runFinalReport(documentMap);
+
         } catch (XccConfigException e) {
             LOG.error("Exception caught: ", e);
         } catch (RequestException e) {
@@ -72,6 +74,23 @@ public class MD5Sync {
         }
 
 
+    }
+
+    private static void runFinalReport(Map<String, MarkLogicDocument> documentMap) {
+        LOG.info("Generating report");
+        // TODO - fails if the copy just took place as part of the run.
+        for (String s: documentMap.keySet()){
+            MarkLogicDocument m = documentMap.get(s);
+            StringBuilder sb = new StringBuilder();
+            sb.append("URI:\t").append(Config.ANSI_BLUE).append(m.getUri()).append(Config.ANSI_RESET).append("\tSource MD5:\t").append(m.getSourceMD5());
+            if (m.getTargetMD5().equals(m.getTargetMD5())) {
+                LOG.info("We have a match");
+            } else {
+                sb.append("\tTarget MD5:\t").append(Config.ANSI_RED).append(m.getTargetMD5()).append(Config.ANSI_RESET);
+                LOG.info(sb.toString());
+            }
+           // LOG.info("URI: " + Config.ANSI_BLUE + m.getUri() + Config.ANSI_RESET + " Source MD5: "+ m.getSourceMD5()+ " Target MD5: "+ m.getTargetMD5());
+        }
     }
 
     private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, Session sourceSession, Session targetSession, ResultSequence rs) throws RequestException {
@@ -92,19 +111,27 @@ public class MD5Sync {
                     LOG.info("Don't need to replicate an empty directory node: "+md.getUri());
                 } else {
                     LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
-                    Request sourceDocReq = sourceSession.newAdhocQuery("fn:doc(\"" + md.getUri() + "\")");
+                    Request sourceDocReq = sourceSession.newAdhocQuery(String.format("fn:doc(\"%s\")", md.getUri()));
                     ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
+                    // TODO - collections, properties, permissions etc... ?
                     Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), null);
                     targetSession.insertContent(content);
                 }
 
             } else {
                 LOG.debug(String.format("We don't need to copy this doc(%s) over - TODO - MD5", md.getUri()));
+                Request targetDocReq = sourceSession.newAdhocQuery(Config.MD5_ONELINE.replace("$URI", String.format("\"%s\"", md.getUri())));
 
+                        //"fn:doc(\"" + md.getUri() + "\")");
+                ResultSequence rsT2 = sourceSession.submitRequest(targetDocReq);
+                String md5sum = rsT2.asString();
+                LOG.debug("MD5 on target: "+md5sum);
+                md.setTargetMD5(md5sum);
             }
 
-
-            documentMap.put(md.getUri(), md);
+            if(!md.getUri().equals("/")) {
+                documentMap.put(md.getUri(), md);
+            }
             //LOG.info("idx"+i.asString().lastIndexOf("~~~"));
             //LOG.info(i.asString().split("~~~")[1]);
             //LOG.info(i.asString().split("~~~")[2]);
