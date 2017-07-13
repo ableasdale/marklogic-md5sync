@@ -25,7 +25,6 @@ public class MD5Sync {
 
     private static ResultSequence getBatch(String uri, Session sourceSession) {
 
-
         ResultSequence rs = null;
         Request request = sourceSession.newAdhocQuery(batchQuery.replace("(),", String.format("\"%s\",", uri)));
         try {
@@ -37,7 +36,7 @@ public class MD5Sync {
     }
 
     public static void main(String[] args) {
-        Map<String, MarkLogicDocument> documentMap = new HashMap<String, MarkLogicDocument>();
+        Map<String, MarkLogicDocument> documentMap = new HashMap<>();
 
         try {
             batchQuery = new String(Files.readAllBytes(Paths.get("src/main/resources/query.xqy")));
@@ -111,11 +110,22 @@ public class MD5Sync {
                     LOG.info("Don't need to replicate an empty directory node: " + md.getUri());
                 } else {
                     LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
-                    Request sourceDocReq = sourceSession.newAdhocQuery(String.format("fn:doc(\"%s\")", md.getUri()));
+                    Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
                     ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
+                    LOG.info("Collection size: " +rsS.size());
                     // TODO - collections, properties, permissions etc... ?
-                    Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), null);
+                    ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
+                    co.setCollections(rsS.resultItemAt(2).asString().split("~"));
+
+                    //co.setMetadata();
+                    //co.setPermissions();
+
+                    Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
                     targetSession.insertContent(content);
+                    LOG.info("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+
+                    Request targetProps = targetSession.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+                    targetSession.submitRequest(targetProps);
                 }
 
             }
