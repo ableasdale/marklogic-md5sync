@@ -1,3 +1,5 @@
+package com.marklogic.support.md5sync;
+
 import com.marklogic.xcc.*;
 import com.marklogic.xcc.exceptions.RequestException;
 import com.marklogic.xcc.exceptions.XccConfigException;
@@ -16,21 +18,35 @@ import java.util.Map;
  */
 public class MD5Sync {
 
-    private static Logger LOG = LoggerFactory.getLogger("MD5Sync");
+    private static Logger LOG = LoggerFactory.getLogger("com.marklogic.support.md5sync.MD5Sync");
     private static String lastProcessedURI = null;
     private static String batchQuery = null;
+    private static boolean complete = false;
 
     private static ContentSource csSource = null;
     private static ContentSource csTarget = null;
 
     private static ResultSequence getBatch(String uri, Session sourceSession) {
-
+        String query = "fn:count(cts:uris( \""+uri+"\", ('limit=10')))";
+        LOG.debug("Query: "+query);
+        Request request = sourceSession.newAdhocQuery(query);
         ResultSequence rs = null;
-        Request request = sourceSession.newAdhocQuery(batchQuery.replace("(),", String.format("\"%s\",", uri)));
         try {
             rs = sourceSession.submitRequest(request);
         } catch (RequestException e) {
             e.printStackTrace();
+        }
+        boolean moreThanOne = (Integer.parseInt(rs.asString()) > 1);
+
+        if(moreThanOne) {
+            request = sourceSession.newAdhocQuery(batchQuery.replace("(),", String.format("\"%s\",", uri)));
+            try {
+                rs = sourceSession.submitRequest(request);
+            } catch (RequestException e) {
+                e.printStackTrace();
+            }
+        } else {
+            complete = true;
         }
         return rs;
     }
@@ -51,15 +67,15 @@ public class MD5Sync {
             Session targetSession = csTarget.newSession();
 
             ResultSequence rs = getBatch("/", sourceSession);
-            // LOG.info(rs.asString());
-
             processResultSequence(documentMap, sourceSession, targetSession, rs);
-
             LOG.debug(String.format("Sequence size: %s%d%s", Config.ANSI_GREEN, rs.size(), Config.ANSI_RESET));
+            rs.close();
 
+            while(!complete) {
+                rs = getBatch(lastProcessedURI, sourceSession);
+                processResultSequence(documentMap, sourceSession, targetSession, rs);
+            }
 
-            rs = getBatch(lastProcessedURI, sourceSession);
-            processResultSequence(documentMap, sourceSession, targetSession, rs);
 
             sourceSession.close();
             targetSession.close();
@@ -71,7 +87,7 @@ public class MD5Sync {
         } catch (RequestException e) {
             LOG.error("Exception caught: ", e);
         }
-        
+
     }
 
     private static void runFinalReport(Map<String, MarkLogicDocument> documentMap) {
@@ -88,12 +104,12 @@ public class MD5Sync {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_RED).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
             }
-            // LOG.info("URI: " + Config.ANSI_BLUE + m.getUri() + Config.ANSI_RESET + " Source MD5: "+ m.getSourceMD5()+ " Target MD5: "+ m.getTargetMD5());
+            // LOG.info("URI: " + com.marklogic.support.md5sync.Config.ANSI_BLUE + m.getUri() + com.marklogic.support.md5sync.Config.ANSI_RESET + " Source MD5: "+ m.getSourceMD5()+ " Target MD5: "+ m.getTargetMD5());
         }
     }
 
     private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, Session sourceSession, Session targetSession, ResultSequence rs) throws RequestException {
-
+        //LOG.info("Starting with a batch");
         while (rs.hasNext()) {
             ResultItem i = rs.next();
             MarkLogicDocument md = new MarkLogicDocument();
@@ -145,17 +161,17 @@ public class MD5Sync {
         LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
         Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
         ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
-        LOG.info("Collection size: " +rsS.size());
+        LOG.debug("Collection size: " +rsS.size());
         // TODO - collections, properties, permissions etc... ?
         ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
         co.setCollections(rsS.resultItemAt(2).asString().split("~"));
-
+        // TODO - not all operations - such as perms - are in this routine
         //co.setMetadata();
         //co.setPermissions();
 
         Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
         targetSession.insertContent(content);
-        LOG.info("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+        LOG.debug("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
 
         Request targetProps = targetSession.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
         targetSession.submitRequest(targetProps);

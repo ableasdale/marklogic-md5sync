@@ -1,3 +1,5 @@
+package com.marklogic.support.md5sync;
+
 /**
  * Created by ableasdale on 12/07/2017.
  */
