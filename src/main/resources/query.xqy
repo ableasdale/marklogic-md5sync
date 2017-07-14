@@ -1,6 +1,6 @@
 xquery version "1.0-ml";
 
-for $URI in cts:uris( (), ('limit=1000') )
+for $URI in cts:uris( (), ('limit=5000') )
 return
     if ($URI and fn:doc-available($URI))
     then (
