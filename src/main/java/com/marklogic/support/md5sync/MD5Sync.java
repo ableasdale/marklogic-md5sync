@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 /**
- * MD5Sync
+ * MarkLogic MD5Sync
  *
  * Created by ableasdale on 12/07/2017.
  */
@@ -30,8 +30,8 @@ public class MD5Sync {
     private static ContentSource csTarget = null;
 
     private static ResultSequence getBatch(String uri, Session sourceSession) {
-        String query = "fn:count(cts:uris( \""+uri+"\", ('limit=10')))";
-        LOG.debug("Query: "+query);
+        String query = "fn:count(cts:uris( \"" + uri + "\", ('limit=10')))";
+        LOG.debug("Query: " + query);
         Request request = sourceSession.newAdhocQuery(query);
         ResultSequence rs = null;
         try {
@@ -41,7 +41,7 @@ public class MD5Sync {
         }
         boolean moreThanOne = (Integer.parseInt(rs.asString()) > 1);
 
-        if(moreThanOne) {
+        if (moreThanOne) {
             request = sourceSession.newAdhocQuery(batchQuery.replace("(),", String.format("\"%s\",", uri)));
             try {
                 rs = sourceSession.submitRequest(request);
@@ -78,24 +78,40 @@ public class MD5Sync {
             // LOG.debug(String.format("Sequence size: %s%d%s", Config.ANSI_GREEN, rs.size(), Config.ANSI_RESET));
             rs.close();
 
-            while(!complete) {
+            while (!complete) {
                 rs = getBatch(lastProcessedURI, sourceSession);
                 processResultSequence(documentMap, sourceSession, targetSession, rs);
             }
 
+
+            // When the completion service is done..
+
             sourceSession.close();
             targetSession.close();
+            //es.invokeAll(completionService);
+            //completionService.
+            es.shutdown();
 
+            while (!es.isTerminated()) {
+                // the take() blocks until any of the jobs complete
+                // this joins with the jobs in the order they _finish_
+                Future<Integer> future = completionService.take();
+                // this get() won't block
+                Integer i = future.get();
+                LOG.info("X" + i);
+            }
+
+            LOG.info("About to run the report - TODO - xdmp:estimate on both master and target?");
             runFinalReport(documentMap);
 
-        } catch (XccConfigException | RequestException e) {
+        } catch (XccConfigException | RequestException | InterruptedException | ExecutionException e) {
             LOG.error("Exception caught: ", e);
         }
     }
 
     private static void runFinalReport(Map<String, MarkLogicDocument> documentMap) {
         LOG.info("Generating report");
-        // TODO - output to file?
+
         // TODO - fails if the copy just took place as part of the run.
         for (String s : documentMap.keySet()) {
             MarkLogicDocument m = documentMap.get(s);
@@ -104,7 +120,9 @@ public class MD5Sync {
             if (m.getSourceMD5().equals(m.getTargetMD5())) {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_GREEN).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
-            } else {
+            } /*else if (m.getTargetMD5() == null) {
+                sb.append("\tTarget MD5:\t").append(Config.ANSI_GREEN).append("Document copied over").append(Config.ANSI_RESET);
+            } */ else {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_RED).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
             }
@@ -112,7 +130,7 @@ public class MD5Sync {
     }
 
     private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, Session sourceSession, Session targetSession, ResultSequence rs) throws RequestException {
-        if(rs != null) {
+        if (rs != null) {
             LOG.debug(String.format("Starting with a batch of %d documents", rs.size()));
 
             while (rs.hasNext()) {
@@ -172,19 +190,19 @@ public class MD5Sync {
         private MarkLogicDocument md;
 
         DocumentCopier(MarkLogicDocument md) {
-            LOG.debug("working on: "+md.getUri());
+            LOG.debug("working on: " + md.getUri());
             this.md = md;
         }
 
         int writeDocument() throws Exception {
-            LOG.debug("Writing Document "+md.getUri());
+            LOG.debug("Writing Document " + md.getUri());
             Session s = csSource.newSession();
             Session t = csTarget.newSession();
 
             LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
             Request sourceDocReq = s.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
             ResultSequence rsS = s.submitRequest(sourceDocReq);
-            LOG.debug("Collection size: " +rsS.size());
+            LOG.debug("Collection size: " + rsS.size());
             // TODO - collections, properties, permissions etc... ?
             ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
             co.setCollections(rsS.resultItemAt(2).asString().split("~"));
@@ -194,9 +212,9 @@ public class MD5Sync {
 
             Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
             t.insertContent(content);
-            LOG.debug("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+            LOG.debug("xdmp:document-set-properties(\"" + md.getUri() + "\", " + rsS.resultItemAt(1).asString() + ")");
 
-            Request targetProps = t.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+            Request targetProps = t.newAdhocQuery("xdmp:document-set-properties(\"" + md.getUri() + "\", " + rsS.resultItemAt(1).asString() + ")");
             t.submitRequest(targetProps);
 
             s.close();
