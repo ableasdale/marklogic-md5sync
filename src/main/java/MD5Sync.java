@@ -83,7 +83,8 @@ public class MD5Sync {
             StringBuilder sb = new StringBuilder();
             sb.append("URI:\t").append(Config.ANSI_BLUE).append(m.getUri()).append(Config.ANSI_RESET).append("\tSource MD5:\t").append(m.getSourceMD5());
             if (m.getSourceMD5().equals(m.getTargetMD5())) {
-                LOG.info("We have a match");
+                sb.append("\tTarget MD5:\t").append(Config.ANSI_GREEN).append(m.getTargetMD5()).append(Config.ANSI_RESET);
+                LOG.info(sb.toString());
             } else {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_RED).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
@@ -110,7 +111,7 @@ public class MD5Sync {
                     LOG.info("Don't need to replicate an empty directory node: " + md.getUri());
                 } else {
                     LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
-                    Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
+                    Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
                     ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
                     LOG.info("Collection size: " +rsS.size());
                     // TODO - collections, properties, permissions etc... ?
