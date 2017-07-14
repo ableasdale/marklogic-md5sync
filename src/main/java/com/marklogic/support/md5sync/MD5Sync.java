@@ -114,6 +114,12 @@ public class MD5Sync {
         LOG.info("Starting with a batch of "+rs.size()+" documents");
         while (rs.hasNext()) {
             ResultItem i = rs.next();
+
+            if(rs.size() <= 1){
+                LOG.info("Only one item returned - is this the end? "+ i.asString());
+
+            }
+
             MarkLogicDocument md = new MarkLogicDocument();
             md.setUri(i.asString().substring(0, i.asString().lastIndexOf("~~~")));
             md.setSourceMD5(i.asString().substring(i.asString().lastIndexOf("~~~") + 3));
@@ -125,11 +131,10 @@ public class MD5Sync {
 
             if (rsT.asString().equals("false")) {
                 if (md.getUri().equals("/")) {
-                    LOG.info("Don't need to replicate an empty directory node: " + md.getUri());
+                    LOG.debug("Don't need to replicate an empty directory node: " + md.getUri());
                 } else {
-                    LOG.info("Doc not available in destination: "+ md.getUri());
+                    LOG.debug("Doc not available in destination: "+ md.getUri());
                     completionService.submit(new DocumentCopier(md));
-                    //completionService.submit(copyDocumentFromSourceToDestination(sourceSession, targetSession, md));
                 }
             } else {
                 LOG.debug(String.format("Doc (%s) exists - getting the MD5 hash", md.getUri()));
@@ -141,10 +146,9 @@ public class MD5Sync {
                 md.setTargetMD5(md5sum);
 
                 // Sychronise if the hashes don't match
-                if (!md.getTargetMD5().equals(md.getSourceMD5())) {
-                    LOG.info("MD5 hashes do not match - copying document over");
+                if (!md.getTargetMD5().equals(md.getSourceMD5()) || !md.getUri().equals("/")) {
+                    LOG.info("MD5 hashes do not match for "+md.getUri()+" - copying document over");
                     completionService.submit(new DocumentCopier(md));
-                    //copyDocumentFromSourceToDestination(sourceSession, targetSession, md);
                 }
             }
             if (!md.getUri().equals("/")) {
@@ -164,7 +168,7 @@ public class MD5Sync {
         private MarkLogicDocument md;
 
         public DocumentCopier(MarkLogicDocument md) {
-            LOG.info("working on: "+md.getUri());
+            LOG.debug("working on: "+md.getUri());
             this.md = md;
         }
 
