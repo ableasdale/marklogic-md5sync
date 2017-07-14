@@ -10,8 +10,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.*;
 
 /**
  * Created by ableasdale on 12/07/2017.
@@ -22,7 +22,8 @@ public class MD5Sync {
     private static String lastProcessedURI = null;
     private static String batchQuery = null;
     private static boolean complete = false;
-
+    private static ExecutorService es = Executors.newFixedThreadPool(Config.THREAD_POOL_SIZE);
+    private static ExecutorCompletionService<Integer> completionService;
     private static ContentSource csSource = null;
     private static ContentSource csTarget = null;
 
@@ -52,7 +53,9 @@ public class MD5Sync {
     }
 
     public static void main(String[] args) {
-        Map<String, MarkLogicDocument> documentMap = new HashMap<>();
+        Map<String, MarkLogicDocument> documentMap = new ConcurrentHashMap<>();
+        completionService = new ExecutorCompletionService<Integer>(es);
+
 
         try {
             batchQuery = new String(Files.readAllBytes(Paths.get("src/main/resources/query.xqy")));
@@ -75,7 +78,6 @@ public class MD5Sync {
                 rs = getBatch(lastProcessedURI, sourceSession);
                 processResultSequence(documentMap, sourceSession, targetSession, rs);
             }
-
 
             sourceSession.close();
             targetSession.close();
@@ -109,7 +111,7 @@ public class MD5Sync {
     }
 
     private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, Session sourceSession, Session targetSession, ResultSequence rs) throws RequestException {
-        //LOG.info("Starting with a batch");
+        LOG.info("Starting with a batch of "+rs.size()+" documents");
         while (rs.hasNext()) {
             ResultItem i = rs.next();
             MarkLogicDocument md = new MarkLogicDocument();
@@ -125,31 +127,30 @@ public class MD5Sync {
                 if (md.getUri().equals("/")) {
                     LOG.info("Don't need to replicate an empty directory node: " + md.getUri());
                 } else {
-                    copyDocumentFromSourceToDestination(sourceSession, targetSession, md);
+                    LOG.info("Doc not available in destination: "+ md.getUri());
+                    completionService.submit(new DocumentCopier(md));
+                    //completionService.submit(copyDocumentFromSourceToDestination(sourceSession, targetSession, md));
                 }
+            } else {
+                LOG.debug(String.format("Doc (%s) exists - getting the MD5 hash", md.getUri()));
+                Request targetDocReq = targetSession.newAdhocQuery(Config.MD5_ONELINE.replace("$URI", String.format("\"%s\"", md.getUri())));
 
+                ResultSequence rsT2 = targetSession.submitRequest(targetDocReq);
+                String md5sum = rsT2.asString();
+                LOG.debug(String.format("MD5 on target: %s MD5 on source: %s", md5sum, md.getSourceMD5()));
+                md.setTargetMD5(md5sum);
+
+                // Sychronise if the hashes don't match
+                if (!md.getTargetMD5().equals(md.getSourceMD5())) {
+                    LOG.info("MD5 hashes do not match - copying document over");
+                    completionService.submit(new DocumentCopier(md));
+                    //copyDocumentFromSourceToDestination(sourceSession, targetSession, md);
+                }
             }
-            LOG.debug(String.format("Doc (%s) exists - getting the MD5 hash", md.getUri()));
-            Request targetDocReq = targetSession.newAdhocQuery(Config.MD5_ONELINE.replace("$URI", String.format("\"%s\"", md.getUri())));
-
-            //"fn:doc(\"" + md.getUri() + "\")");
-            ResultSequence rsT2 = targetSession.submitRequest(targetDocReq);
-            String md5sum = rsT2.asString();
-            LOG.debug(String.format("MD5 on target: %s MD5 on source: %s", md5sum, md.getSourceMD5()));
-            md.setTargetMD5(md5sum);
-
-            // TODO - do they match?  if not: sync
-            if(!md.getTargetMD5().equals(md.getSourceMD5())) {
-                LOG.debug("MD5 hashes do not match - copying document over");
-                copyDocumentFromSourceToDestination(sourceSession, targetSession, md);
-            }
-
             if (!md.getUri().equals("/")) {
                 documentMap.put(md.getUri(), md);
             }
-            //LOG.info("idx"+i.asString().lastIndexOf("~~~"));
-            //LOG.info(i.asString().split("~~~")[1]);
-            //LOG.info(i.asString().split("~~~")[2]);
+
             if (!rs.hasNext()) {
                 LOG.info(String.format("Last item in batch: %s%s%s", Config.ANSI_BLUE, md.getUri(), Config.ANSI_RESET));
                 lastProcessedURI = md.getUri();
@@ -157,24 +158,48 @@ public class MD5Sync {
         }
     }
 
-    private static void copyDocumentFromSourceToDestination(Session sourceSession, Session targetSession, MarkLogicDocument md) throws RequestException {
-        LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
-        Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
-        ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
-        LOG.debug("Collection size: " +rsS.size());
-        // TODO - collections, properties, permissions etc... ?
-        ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
-        co.setCollections(rsS.resultItemAt(2).asString().split("~"));
-        // TODO - not all operations - such as perms - are in this routine
-        //co.setMetadata();
-        //co.setPermissions();
 
-        Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
-        targetSession.insertContent(content);
-        LOG.debug("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+    public static class DocumentCopier implements Callable {
 
-        Request targetProps = targetSession.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
-        targetSession.submitRequest(targetProps);
+        private MarkLogicDocument md;
+
+        public DocumentCopier(MarkLogicDocument md) {
+            LOG.info("working on: "+md.getUri());
+            this.md = md;
+        }
+
+        public int writeDocument() throws Exception {
+            LOG.debug("Writing Document "+md.getUri());
+            Session s = csSource.newSession();
+            Session t = csTarget.newSession();
+
+            LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
+            Request sourceDocReq = s.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
+            ResultSequence rsS = s.submitRequest(sourceDocReq);
+            LOG.debug("Collection size: " +rsS.size());
+            // TODO - collections, properties, permissions etc... ?
+            ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
+            co.setCollections(rsS.resultItemAt(2).asString().split("~"));
+            // TODO - not all operations - such as perms - are in this routine
+            //co.setMetadata();
+            //co.setPermissions();
+
+            Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
+            t.insertContent(content);
+            LOG.debug("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+
+            Request targetProps = t.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+            t.submitRequest(targetProps);
+
+            s.close();
+            t.close();
+
+            return 1;
+        }
+
+        public Object call() throws Exception {
+            return writeDocument();
+        }
     }
 
 }
