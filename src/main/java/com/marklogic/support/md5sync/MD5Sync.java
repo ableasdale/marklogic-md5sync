@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 /**
+ * MD5Sync
+ *
  * Created by ableasdale on 12/07/2017.
  */
 public class MD5Sync {
@@ -47,7 +49,7 @@ public class MD5Sync {
                 e.printStackTrace();
             }
         } else {
-            LOG.info("Just one left?");
+            // Down to last item, so close the result sequence
             complete = true;
             rs.close();
             rs = null;
@@ -57,7 +59,7 @@ public class MD5Sync {
 
     public static void main(String[] args) {
         Map<String, MarkLogicDocument> documentMap = new ConcurrentHashMap<>();
-        completionService = new ExecutorCompletionService<Integer>(es);
+        completionService = new ExecutorCompletionService<>(es);
 
         try {
             batchQuery = new String(Files.readAllBytes(Paths.get("src/main/resources/query.xqy")));
@@ -73,7 +75,7 @@ public class MD5Sync {
 
             ResultSequence rs = getBatch("/", sourceSession);
             processResultSequence(documentMap, sourceSession, targetSession, rs);
-            LOG.debug(String.format("Sequence size: %s%d%s", Config.ANSI_GREEN, rs.size(), Config.ANSI_RESET));
+            // LOG.debug(String.format("Sequence size: %s%d%s", Config.ANSI_GREEN, rs.size(), Config.ANSI_RESET));
             rs.close();
 
             while(!complete) {
@@ -86,16 +88,14 @@ public class MD5Sync {
 
             runFinalReport(documentMap);
 
-        } catch (XccConfigException e) {
-            LOG.error("Exception caught: ", e);
-        } catch (RequestException e) {
+        } catch (XccConfigException | RequestException e) {
             LOG.error("Exception caught: ", e);
         }
-
     }
 
     private static void runFinalReport(Map<String, MarkLogicDocument> documentMap) {
         LOG.info("Generating report");
+        // TODO - output to file?
         // TODO - fails if the copy just took place as part of the run.
         for (String s : documentMap.keySet()) {
             MarkLogicDocument m = documentMap.get(s);
@@ -108,20 +108,18 @@ public class MD5Sync {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_RED).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
             }
-            // LOG.info("URI: " + com.marklogic.support.md5sync.Config.ANSI_BLUE + m.getUri() + com.marklogic.support.md5sync.Config.ANSI_RESET + " Source MD5: "+ m.getSourceMD5()+ " Target MD5: "+ m.getTargetMD5());
         }
     }
 
     private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, Session sourceSession, Session targetSession, ResultSequence rs) throws RequestException {
         if(rs != null) {
-            LOG.info("Starting with a batch of " + rs.size() + " documents");
+            LOG.debug(String.format("Starting with a batch of %d documents", rs.size()));
 
             while (rs.hasNext()) {
                 ResultItem i = rs.next();
 
                 if (rs.size() <= 1) {
                     LOG.info("Only one item returned - is this the end? " + i.asString());
-
                 }
 
                 MarkLogicDocument md = new MarkLogicDocument();
@@ -160,7 +158,7 @@ public class MD5Sync {
                 }
 
                 if (!rs.hasNext()) {
-                    LOG.info(String.format("Last item in batch: %s%s%s", Config.ANSI_BLUE, md.getUri(), Config.ANSI_RESET));
+                    LOG.info(String.format("Last URI in batch of %s URI(s): %s%s%s", rs.size(), Config.ANSI_BLUE, md.getUri(), Config.ANSI_RESET));
                     lastProcessedURI = md.getUri();
                 }
             }
@@ -173,12 +171,12 @@ public class MD5Sync {
 
         private MarkLogicDocument md;
 
-        public DocumentCopier(MarkLogicDocument md) {
+        DocumentCopier(MarkLogicDocument md) {
             LOG.debug("working on: "+md.getUri());
             this.md = md;
         }
 
-        public int writeDocument() throws Exception {
+        int writeDocument() throws Exception {
             LOG.debug("Writing Document "+md.getUri());
             Session s = csSource.newSession();
             Session t = csTarget.newSession();
