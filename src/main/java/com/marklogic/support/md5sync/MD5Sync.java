@@ -83,22 +83,19 @@ public class MD5Sync {
                 processResultSequence(documentMap, sourceSession, targetSession, rs);
             }
 
-
             // When the completion service is done..
-
             sourceSession.close();
             targetSession.close();
-            //es.invokeAll(completionService);
-            //completionService.
-            es.shutdown();
 
+            es.shutdown();
+            // Clear out the queue
             while (!es.isTerminated()) {
                 // the take() blocks until any of the jobs complete
                 // this joins with the jobs in the order they _finish_
                 Future<Integer> future = completionService.take();
                 // this get() won't block
-                Integer i = future.get();
-                LOG.info("X" + i);
+                int i = future.get();
+                //LOG.info("X" + i);
             }
 
             LOG.info("About to run the report - TODO - xdmp:estimate on both master and target?");
@@ -120,9 +117,9 @@ public class MD5Sync {
             if (m.getSourceMD5().equals(m.getTargetMD5())) {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_GREEN).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
-            } /*else if (m.getTargetMD5() == null) {
-                sb.append("\tTarget MD5:\t").append(Config.ANSI_GREEN).append("Document copied over").append(Config.ANSI_RESET);
-            } */ else {
+            } else if ( m.getTargetMD5().equals(null) || m.getTargetMD5() == null) {
+                sb.append("\tTarget MD5:\t").append(Config.ANSI_GREEN).append("URI synchronised").append(Config.ANSI_RESET);
+            } else {
                 sb.append("\tTarget MD5:\t").append(Config.ANSI_RED).append(m.getTargetMD5()).append(Config.ANSI_RESET);
                 LOG.info(sb.toString());
             }
