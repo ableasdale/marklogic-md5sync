@@ -71,8 +71,7 @@ public class MD5Sync {
         } catch (RequestException e) {
             LOG.error("Exception caught: ", e);
         }
-
-
+        
     }
 
     private static void runFinalReport(Map<String, MarkLogicDocument> documentMap) {
@@ -110,23 +109,7 @@ public class MD5Sync {
                 if (md.getUri().equals("/")) {
                     LOG.info("Don't need to replicate an empty directory node: " + md.getUri());
                 } else {
-                    LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
-                    Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
-                    ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
-                    LOG.info("Collection size: " +rsS.size());
-                    // TODO - collections, properties, permissions etc... ?
-                    ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
-                    co.setCollections(rsS.resultItemAt(2).asString().split("~"));
-
-                    //co.setMetadata();
-                    //co.setPermissions();
-
-                    Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
-                    targetSession.insertContent(content);
-                    LOG.info("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
-
-                    Request targetProps = targetSession.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
-                    targetSession.submitRequest(targetProps);
+                    copyDocumentFromSourceToDestination(sourceSession, targetSession, md);
                 }
 
             }
@@ -136,9 +119,14 @@ public class MD5Sync {
             //"fn:doc(\"" + md.getUri() + "\")");
             ResultSequence rsT2 = targetSession.submitRequest(targetDocReq);
             String md5sum = rsT2.asString();
-            LOG.debug("MD5 on target: " + md5sum);
+            LOG.debug(String.format("MD5 on target: %s MD5 on source: %s", md5sum, md.getSourceMD5()));
             md.setTargetMD5(md5sum);
 
+            // TODO - do they match?  if not: sync
+            if(!md.getTargetMD5().equals(md.getSourceMD5())) {
+                LOG.debug("MD5 hashes do not match - copying document over");
+                copyDocumentFromSourceToDestination(sourceSession, targetSession, md);
+            }
 
             if (!md.getUri().equals("/")) {
                 documentMap.put(md.getUri(), md);
@@ -151,6 +139,26 @@ public class MD5Sync {
                 lastProcessedURI = md.getUri();
             }
         }
+    }
+
+    private static void copyDocumentFromSourceToDestination(Session sourceSession, Session targetSession, MarkLogicDocument md) throws RequestException {
+        LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
+        Request sourceDocReq = sourceSession.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
+        ResultSequence rsS = sourceSession.submitRequest(sourceDocReq);
+        LOG.info("Collection size: " +rsS.size());
+        // TODO - collections, properties, permissions etc... ?
+        ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
+        co.setCollections(rsS.resultItemAt(2).asString().split("~"));
+
+        //co.setMetadata();
+        //co.setPermissions();
+
+        Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
+        targetSession.insertContent(content);
+        LOG.info("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+
+        Request targetProps = targetSession.newAdhocQuery("xdmp:document-set-properties(\""+md.getUri()+"\", "+ rsS.resultItemAt(1).asString() +")");
+        targetSession.submitRequest(targetProps);
     }
 
 }
