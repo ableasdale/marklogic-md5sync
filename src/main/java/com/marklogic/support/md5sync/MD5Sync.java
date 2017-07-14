@@ -76,7 +76,7 @@ public class MD5Sync {
 
             while (!complete) {
                 ResultSequence resSeq = getBatch(lastProcessedURI, sourceSession);
-                processResultSequence(documentMap, targetSession, resSeq);
+                processResultSequence(documentMap, resSeq);
                 if(resSeq != null) {resSeq.close();}
             }
 
@@ -98,7 +98,7 @@ public class MD5Sync {
             sourceSession.close();
             targetSession.close();
 
-            LOG.info("About to run the repor...");
+            LOG.info("About to run the report...");
             runFinalReport(documentMap);
 
         } catch (XccConfigException | RequestException | InterruptedException | ExecutionException e) {
@@ -123,10 +123,10 @@ public class MD5Sync {
         }
     }
 
-    private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, Session targetSession, ResultSequence rs) throws RequestException {
+    private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, ResultSequence rs) throws RequestException {
         if (rs != null) {
             LOG.debug(String.format("Starting with a batch of %d documents", rs.size()));
-
+            Session tS = csTarget.newSession();
             while (rs.hasNext()) {
                 ResultItem i = rs.next();
 
@@ -144,25 +144,26 @@ public class MD5Sync {
                 md.setSourceMD5(i.asString().substring(i.asString().lastIndexOf("~~~") + 3));
 
                 // Check target
-                Request targetRequest = targetSession.newAdhocQuery(String.format("fn:doc-available(\"%s\")", md.getUri()));
-                ResultSequence rsT = targetSession.submitRequest(targetRequest);
+                Request targetRequest = tS.newAdhocQuery(String.format("fn:doc-available(\"%s\")", md.getUri()));
+                ResultSequence rsT = tS.submitRequest(targetRequest);
                 LOG.debug(String.format("Is the doc available? %s", rsT.asString()));
 
                 if (rsT.asString().equals("false")) {
                     if (md.getUri().equals("/")) {
-                        LOG.debug(String.format("Don't need to replicate an empty directory node: %s", md.getUri()));
+                        LOG.info(String.format("Don't need to replicate an empty directory node: %s", md.getUri()));
                     } else {
                         LOG.debug("Doc not available in destination: " + md.getUri());
                         completionService.submit(new DocumentCopier(md));
                     }
                 } else {
                     LOG.debug(String.format("Doc (%s) exists - getting the MD5 hash", md.getUri()));
-                    Request targetDocReq = targetSession.newAdhocQuery(Config.MD5_ONELINE.replace("$URI", String.format("\"%s\"", md.getUri())));
+                    Request targetDocReq = tS.newAdhocQuery(Config.MD5_ONELINE.replace("$URI", String.format("\"%s\"", md.getUri())));
 
-                    ResultSequence rsT2 = targetSession.submitRequest(targetDocReq);
+                    ResultSequence rsT2 = tS.submitRequest(targetDocReq);
                     String md5sum = rsT2.asString();
                     LOG.debug(String.format("MD5 on target: %s MD5 on source: %s", md5sum, md.getSourceMD5()));
                     md.setTargetMD5(md5sum);
+                    rsT2.close();
 
                     // Sychronise if the hashes don't match
                     if (!md.getTargetMD5().equals(md.getSourceMD5()) && !md.getUri().equals("/")) {
@@ -170,6 +171,7 @@ public class MD5Sync {
                         completionService.submit(new DocumentCopier(md));
                     }
                 }
+                rsT.close();
                 if (!md.getUri().equals("/")) {
                     documentMap.put(md.getUri(), md);
                 }
