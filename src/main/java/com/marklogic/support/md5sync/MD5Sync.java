@@ -190,24 +190,33 @@ public class MD5Sync {
             Session t = csTarget.newSession();
 
             LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
-            Request sourceDocReq = s.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*, (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri()));
+
+            Request sourceDocReq = s.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*,"+ Config.PERMISSIONS_QUERY + ", (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri(), md.getUri()));
             ResultSequence rsS = null;
             try {
                 rsS = s.submitRequest(sourceDocReq);
+                //LOG.info(rsS.asString(),"~");
                 LOG.debug(String.format("Collection size: %d", rsS.size()));
                 // TODO - collections, properties, permissions etc... ?
                 ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
-                co.setCollections(rsS.resultItemAt(2).asString().split("~"));
-                // TODO - not all operations - such as perms - are in this routine
+                co.setCollections(rsS.resultItemAt(3).asString().split("~"));
+                // TODO - not all operations - such as perms - are in this routine xdmp:document-get-permissions("/10537544586077713775.xml")
                 //co.setMetadata();
-                //co.setPermissions();
+           //     co.setPermissions(rsS.resultItemAt(2).asString());
+
 
                 Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
                 t.insertContent(content);
+
                 LOG.debug(String.format("xdmp:document-set-properties(\"%s\", %s)", md.getUri(), rsS.resultItemAt(1).asString()));
 
                 Request targetProps = t.newAdhocQuery(String.format("xdmp:document-set-properties(\"%s\", %s)", md.getUri(), rsS.resultItemAt(1).asString()));
                 t.submitRequest(targetProps);
+
+                //LOG.info(rsS.resultItemAt(2).asString());
+                Request targetPerms = t.newAdhocQuery(String.format("xdmp:document-set-permissions(\"%s\", %s)", md.getUri(), rsS.resultItemAt(2).asString()));
+                //LOG.info(t.)
+                t.submitRequest(targetPerms);
 
             } catch (RequestException e) {
                 LOG.error("Exception caught: ", e);
