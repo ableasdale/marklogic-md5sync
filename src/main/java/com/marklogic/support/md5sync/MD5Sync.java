@@ -30,7 +30,6 @@ public class MD5Sync {
     private static String lastProcessedURI = "/";
     private static String batchQuery = null;
     private static boolean complete = false;
-    // private static ExecutorService es = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     private static ExecutorService es = Executors.newFixedThreadPool(Config.THREAD_POOL_SIZE);
     private static ContentSource csSource = null;
     private static ContentSource csTarget = null;
@@ -46,7 +45,6 @@ public class MD5Sync {
             e.printStackTrace();
         }
         boolean moreThanOne = (Integer.parseInt(rs.asString()) > 1);
-        //rs.getValueType().
 
         if (moreThanOne) {
             request = sourceSession.newAdhocQuery(batchQuery.replace("(),", String.format("\"%s\",", uri)));
@@ -68,7 +66,7 @@ public class MD5Sync {
         Map<String, MarkLogicDocument> documentMap = new ConcurrentHashMap<>();
 
         try {
-            batchQuery = new String(Files.readAllBytes(Paths.get("src/main/resources/query.xqy")));
+            batchQuery = new String(Files.readAllBytes(Paths.get(Config.CTS_URIS_QUERY)));
             csSource = ContentSourceFactory.newContentSource(URI.create(Config.INPUT_XCC_URI));
             csTarget = ContentSourceFactory.newContentSource(URI.create(Config.OUTPUT_XCC_URI));
             Session sourceSession = csSource.newSession();
@@ -174,7 +172,6 @@ public class MD5Sync {
         }
     }
 
-
     public static class DocumentCopier implements Runnable {
 
         private MarkLogicDocument md;
@@ -184,6 +181,15 @@ public class MD5Sync {
             this.md = md;
         }
 
+        private String buildAdHocQuery(String uri) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format(Config.FN_DOC, uri)).append(", ");
+            sb.append(String.format(Config.PROPERTIES_QUERY, uri)).append(", ");
+            sb.append(String.format(Config.PERMISSIONS_QUERY, uri)).append(", ");
+            sb.append(String.format(Config.COLLECTIONS_QUERY, uri));
+            return sb.toString();
+        }
+
         private void writeDocument() {
             LOG.debug(String.format("Writing Document %s", md.getUri()));
             Session s = csSource.newSession();
@@ -191,19 +197,17 @@ public class MD5Sync {
 
             LOG.debug(String.format("We need to copy this doc (%s) over", md.getUri()));
 
-            Request sourceDocReq = s.newAdhocQuery(String.format("(fn:doc(\"%s\"), xdmp:document-properties(\"%s\")/prop:properties/*,"+ Config.PERMISSIONS_QUERY + ", (string-join(xdmp:document-get-collections(\"%s\"),'~')))", md.getUri(), md.getUri(), md.getUri(), md.getUri()));
+            Request sourceDocReq = s.newAdhocQuery(buildAdHocQuery(md.getUri()));
             ResultSequence rsS = null;
             try {
                 rsS = s.submitRequest(sourceDocReq);
-                //LOG.info(rsS.asString(),"~");
                 LOG.debug(String.format("Collection size: %d", rsS.size()));
                 // TODO - collections, properties, permissions etc... ?
                 ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
                 co.setCollections(rsS.resultItemAt(3).asString().split("~"));
                 // TODO - not all operations - such as perms - are in this routine xdmp:document-get-permissions("/10537544586077713775.xml")
                 //co.setMetadata();
-           //     co.setPermissions(rsS.resultItemAt(2).asString());
-
+                //     co.setPermissions(rsS.resultItemAt(2).asString());
 
                 Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
                 t.insertContent(content);
@@ -213,9 +217,7 @@ public class MD5Sync {
                 Request targetProps = t.newAdhocQuery(String.format("xdmp:document-set-properties(\"%s\", %s)", md.getUri(), rsS.resultItemAt(1).asString()));
                 t.submitRequest(targetProps);
 
-                //LOG.info(rsS.resultItemAt(2).asString());
                 Request targetPerms = t.newAdhocQuery(String.format("xdmp:document-set-permissions(\"%s\", %s)", md.getUri(), rsS.resultItemAt(2).asString()));
-                //LOG.info(t.)
                 t.submitRequest(targetPerms);
 
             } catch (RequestException e) {
@@ -230,5 +232,4 @@ public class MD5Sync {
             writeDocument();
         }
     }
-
 }
