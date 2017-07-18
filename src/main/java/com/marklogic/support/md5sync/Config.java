@@ -18,5 +18,6 @@ public class Config {
     public static final String PROPERTIES_QUERY = "xdmp:document-properties(\"%s\")/prop:properties/*";
     public static final String COLLECTIONS_QUERY = "(string-join(xdmp:document-get-collections(\"%s\"),'~')))";
     public static final String FN_DOC = "(fn:doc(\"%s\")";
+    public static final String XDMP_ESTIMATE_QUERY = "xdmp:estimate(doc())";
 
 }

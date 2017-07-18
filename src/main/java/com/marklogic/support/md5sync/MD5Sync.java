@@ -104,7 +104,20 @@ public class MD5Sync {
                 }
             }
 
-            // TODO - xdmp:estimate on both master and target?
+            // xdmp:estimate on both master and target
+            Request sReq = sourceSession.newAdhocQuery(Config.XDMP_ESTIMATE_QUERY);
+            ResultSequence sRs = sourceSession.submitRequest(sReq);
+            int sourceCount = Integer.parseInt(sRs.asString());
+
+            Request tReq = targetSession.newAdhocQuery(Config.XDMP_ESTIMATE_QUERY);
+            ResultSequence tRs = targetSession.submitRequest(tReq);
+            int targetCount = Integer.parseInt(tRs.asString());
+
+            if (sourceCount == targetCount) {
+                LOG.info(String.format("%sSource and target number of documents match:\t(source: %d)\t(target: %d)%s", Config.ANSI_GREEN, sourceCount, targetCount, Config.ANSI_RESET));
+            } else {
+                LOG.error(String.format("%sSource and target number of documents do not match:\t(source: %d)\t(target: %d)%s", Config.ANSI_RED, sourceCount, targetCount, Config.ANSI_RESET));
+            }
 
             sourceSession.close();
             targetSession.close();
@@ -219,12 +232,10 @@ public class MD5Sync {
             try {
                 rsS = s.submitRequest(sourceDocReq);
                 LOG.debug(String.format("Collection size: %d", rsS.size()));
-                // TODO - collections, properties, permissions etc... ?
+                // TODO - also copy metadata, qualities, etc?
                 ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
                 co.setCollections(rsS.resultItemAt(3).asString().split("~"));
-                // TODO - not all operations - such as perms - are in this routine xdmp:document-get-permissions("/10537544586077713775.xml")
                 //co.setMetadata();
-                //     co.setPermissions(rsS.resultItemAt(2).asString());
 
                 Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
                 t.insertContent(content);
