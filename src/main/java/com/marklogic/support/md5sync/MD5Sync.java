@@ -122,7 +122,7 @@ public class MD5Sync {
             sourceSession.close();
             targetSession.close();
 
-            LOG.info("About to run the report...");
+            LOG.debug("About to run the report...");
             runFinalReport(documentMap);
 
         } catch (XccConfigException | RequestException | IOException e) {
