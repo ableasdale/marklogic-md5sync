@@ -114,9 +114,9 @@ public class MD5Sync {
             int targetCount = Integer.parseInt(tRs.asString());
 
             if (sourceCount == targetCount) {
-                LOG.info(String.format("%sSource and target number of documents match:\t(source: %d)\t(target: %d)%s", Config.ANSI_GREEN, sourceCount, targetCount, Config.ANSI_RESET));
+                LOG.info(String.format("%sSource and target number of documents match:\t(Source: %d)\t\t(Target: %d)%s", Config.ANSI_GREEN, sourceCount, targetCount, Config.ANSI_RESET));
             } else {
-                LOG.error(String.format("%sSource and target number of documents do not match:\t(source: %d)\t(target: %d)%s", Config.ANSI_RED, sourceCount, targetCount, Config.ANSI_RESET));
+                LOG.error(String.format("%sSource and target number of documents do not match:\t(Source: %d)\t\t(Target: %d)%s", Config.ANSI_RED, sourceCount, targetCount, Config.ANSI_RESET));
             }
 
             sourceSession.close();
