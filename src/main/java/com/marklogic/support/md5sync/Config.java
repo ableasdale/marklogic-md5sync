@@ -6,6 +6,7 @@ package com.marklogic.support.md5sync;
 public class Config {
 
     public static final int THREAD_POOL_SIZE = 64;
+
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_BLUE = "\u001B[34m";
@@ -17,8 +18,5 @@ public class Config {
     public static final String PROPERTIES_QUERY = "xdmp:document-properties(\"%s\")/prop:properties/*";
     public static final String COLLECTIONS_QUERY = "(string-join(xdmp:document-get-collections(\"%s\"),'~')))";
     public static final String FN_DOC = "(fn:doc(\"%s\")";
-
-    public static final String INPUT_XCC_URI = "xcc://admin:admin@engrlab-128-208.engrlab.marklogic.com:9000/Documents";
-    public static final String OUTPUT_XCC_URI = "xcc://q:q@localhost:8000/18854";
 
 }

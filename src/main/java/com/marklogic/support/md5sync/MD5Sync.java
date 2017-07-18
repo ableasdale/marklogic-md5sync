@@ -3,10 +3,14 @@ package com.marklogic.support.md5sync;
 import com.marklogic.xcc.*;
 import com.marklogic.xcc.exceptions.RequestException;
 import com.marklogic.xcc.exceptions.XccConfigException;
+import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.configuration2.builder.fluent.Configurations;
+import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.URI;
@@ -27,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 public class MD5Sync {
 
     private static Logger LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+    private static String INPUT_XCC_URI = null;
+    private static String OUTPUT_XCC_URI = null;
     private static String lastProcessedURI = "/";
     private static String batchQuery = null;
     private static boolean complete = false;
@@ -65,10 +71,21 @@ public class MD5Sync {
     public static void main(String[] args) {
         Map<String, MarkLogicDocument> documentMap = new ConcurrentHashMap<>();
 
+        Configurations configs = new Configurations();
+        try {
+            Configuration config = configs.properties(new File("config.properties"));
+            INPUT_XCC_URI = config.getString("source.uri");
+            OUTPUT_XCC_URI = config.getString("target.uri");
+            LOG.debug(String.format("Configured Input XCC URI: %s", INPUT_XCC_URI));
+            LOG.debug(String.format("Configured Output XCC URI: %s", OUTPUT_XCC_URI));
+        } catch (ConfigurationException cex) {
+            LOG.error("Configuration issue: " + cex);
+        }
+
         try {
             batchQuery = new String(Files.readAllBytes(Paths.get(Config.CTS_URIS_QUERY)));
-            csSource = ContentSourceFactory.newContentSource(URI.create(Config.INPUT_XCC_URI));
-            csTarget = ContentSourceFactory.newContentSource(URI.create(Config.OUTPUT_XCC_URI));
+            csSource = ContentSourceFactory.newContentSource(URI.create(INPUT_XCC_URI));
+            csTarget = ContentSourceFactory.newContentSource(URI.create(OUTPUT_XCC_URI));
             Session sourceSession = csSource.newSession();
             Session targetSession = csTarget.newSession();
 
