@@ -1,6 +1,0 @@
-.gitignore
-.gradle/
-.idea/
-build/
-*.log
-src/main/resources/config.properties
