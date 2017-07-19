@@ -82,7 +82,7 @@ public class MD5Sync {
             LOG.debug(String.format("Configured Input XCC URI: %s", INPUT_XCC_URI));
             LOG.debug(String.format("Configured Output XCC URI: %s", OUTPUT_XCC_URI));
         } catch (ConfigurationException cex) {
-            LOG.error("Configuration issue: " + cex);
+            LOG.error("Configuration issue: ", cex);
         }
 
         try {
