@@ -33,6 +33,7 @@ public class MD5Sync {
     private static Logger LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     private static String INPUT_XCC_URI = null;
     private static String OUTPUT_XCC_URI = null;
+    private static boolean RUN_FULL_REPORT = true;
     private static String lastProcessedURI = "/";
     private static String batchQuery = null;
     private static boolean complete = false;
@@ -77,6 +78,7 @@ public class MD5Sync {
             Configuration config = configs.properties(new File("config.properties"));
             INPUT_XCC_URI = config.getString("source.uri");
             OUTPUT_XCC_URI = config.getString("target.uri");
+            RUN_FULL_REPORT = config.getBoolean("generate.report");
             LOG.debug(String.format("Configured Input XCC URI: %s", INPUT_XCC_URI));
             LOG.debug(String.format("Configured Output XCC URI: %s", OUTPUT_XCC_URI));
         } catch (ConfigurationException cex) {
@@ -124,7 +126,7 @@ public class MD5Sync {
             sourceSession.close();
             targetSession.close();
 
-            if (Config.RUN_FULL_REPORT) {
+            if (RUN_FULL_REPORT) {
                 LOG.debug("About to run the report...");
                 runFinalReport(documentMap);
             }

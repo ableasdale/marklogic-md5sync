@@ -6,7 +6,6 @@ package com.marklogic.support.md5sync;
 public class Config {
 
     public static final int THREAD_POOL_SIZE = 64;
-    public static boolean RUN_FULL_REPORT = false;
 
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
