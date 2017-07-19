@@ -60,6 +60,7 @@ public class MD5Sync {
                 e.printStackTrace();
             }
         } else {
+            LOG.info("HERE: not more than one!");
             // Down to last item, so close the result sequence
             // TODO - this is broken!
             complete = true;
@@ -91,6 +92,7 @@ public class MD5Sync {
             Session targetSession = csTarget.newSession();
 
             while (!complete) {
+                LOG.debug("Itemlist not complete - more URIs still to process.");
                 processResultSequence(documentMap, getBatch(lastProcessedURI, sourceSession));
             }
 
@@ -132,7 +134,7 @@ public class MD5Sync {
     }
 
     private static void runFinalReport(Map<String, MarkLogicDocument> documentMap) {
-        LOG.info("Generating report");
+        LOG.info("Generating report ...");
         for (String s : documentMap.keySet()) {
             MarkLogicDocument m = documentMap.get(s);
             StringBuilder sb = new StringBuilder();
@@ -199,6 +201,7 @@ public class MD5Sync {
             }
             tS.close();
             LOG.info(String.format("Last URI in batch of %s URI(s): %s%s%s", rs.size(), Config.ANSI_BLUE, lastProcessedURI, Config.ANSI_RESET));
+            if(rs.size() == 0) {complete = true;}
             rs.close();
         }
     }
@@ -232,8 +235,8 @@ public class MD5Sync {
             ResultSequence rsS = null;
             try {
                 rsS = s.submitRequest(sourceDocReq);
-                LOG.info(String.format("Collection size: %d", rsS.size()));
-                LOG.debug(rsS.asString("***"));
+                LOG.debug(String.format("Collection size: %d", rsS.size()));
+                LOG.debug(String.format("Full resultset: %s", rsS.asString("  ~ | *** | ~ ")));
 
                 // TODO - also copy metadata, qualities, etc?
                 ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
