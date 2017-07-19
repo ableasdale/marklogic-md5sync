@@ -60,9 +60,8 @@ public class MD5Sync {
                 e.printStackTrace();
             }
         } else {
-            LOG.info("HERE: not more than one!");
-            // Down to last item, so close the result sequence
-            // TODO - this is broken!
+            LOG.info(String.format("Down to the last item in the list: %d URI returned", Integer.parseInt(rs.asString())));
+            // Down to last item, so close the result sequence and set the complete flag to true
             complete = true;
             rs.close();
             rs = null;
@@ -125,8 +124,10 @@ public class MD5Sync {
             sourceSession.close();
             targetSession.close();
 
-            LOG.debug("About to run the report...");
-            runFinalReport(documentMap);
+            if (Config.RUN_FULL_REPORT) {
+                LOG.debug("About to run the report...");
+                runFinalReport(documentMap);
+            }
 
         } catch (XccConfigException | RequestException | IOException e) {
             LOG.error("Exception caught: ", e);
@@ -201,7 +202,9 @@ public class MD5Sync {
             }
             tS.close();
             LOG.info(String.format("Last URI in batch of %s URI(s): %s%s%s", rs.size(), Config.ANSI_BLUE, lastProcessedURI, Config.ANSI_RESET));
-            if(rs.size() == 0) {complete = true;}
+            if (rs.size() == 0) {
+                complete = true;
+            }
             rs.close();
         }
     }
