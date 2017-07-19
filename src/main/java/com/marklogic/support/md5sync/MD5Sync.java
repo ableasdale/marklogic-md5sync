@@ -61,6 +61,7 @@ public class MD5Sync {
             }
         } else {
             // Down to last item, so close the result sequence
+            // TODO - this is broken!
             complete = true;
             rs.close();
             rs = null;
@@ -232,6 +233,8 @@ public class MD5Sync {
             try {
                 rsS = s.submitRequest(sourceDocReq);
                 LOG.debug(String.format("Collection size: %d", rsS.size()));
+                LOG.debug(rsS.asString("***"));
+                
                 // TODO - also copy metadata, qualities, etc?
                 ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
                 co.setCollections(rsS.resultItemAt(3).asString().split("~"));
@@ -242,7 +245,7 @@ public class MD5Sync {
 
                 LOG.debug(String.format("xdmp:document-set-properties(\"%s\", %s)", md.getUri(), rsS.resultItemAt(1).asString()));
 
-                Request targetProps = t.newAdhocQuery(String.format("xdmp:document-set-properties(\"%s\", %s)", md.getUri(), rsS.resultItemAt(1).asString()));
+                Request targetProps = t.newAdhocQuery(String.format("xdmp:document-set-properties(\"%s\", %s/prop:properties/*)", md.getUri(), rsS.resultItemAt(1).asString()));
                 t.submitRequest(targetProps);
 
                 Request targetPerms = t.newAdhocQuery(String.format("xdmp:document-set-permissions(\"%s\", %s)", md.getUri(), rsS.resultItemAt(2).asString()));
