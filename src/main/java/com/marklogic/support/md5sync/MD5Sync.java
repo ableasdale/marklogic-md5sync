@@ -245,8 +245,13 @@ public class MD5Sync {
                 LOG.debug(String.format("Full resultset: %s", rsS.asString("  ~ | *** | ~ ")));
 
                 // TODO - also copy metadata, qualities, etc?
+
                 ContentCreateOptions co = ContentCreateOptions.newXmlInstance();
-                co.setCollections(rsS.resultItemAt(3).asString().split("~"));
+                // Only copy collections if there are any to copy:
+                LOG.debug(String.format("Collections: %d", rsS.resultItemAt(3).asString().length()));
+                if(rsS.resultItemAt(3).asString().length() > 0) {
+                    co.setCollections(rsS.resultItemAt(3).asString().split("~"));
+                }
                 //co.setMetadata();
 
                 Content content = ContentFactory.newContent(md.getUri(), rsS.resultItemAt(0).asString(), co);
