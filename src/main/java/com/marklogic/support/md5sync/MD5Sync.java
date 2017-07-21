@@ -156,7 +156,8 @@ public class MD5Sync {
     private static void processResultSequence(Map<String, MarkLogicDocument> documentMap, ResultSequence rs) throws RequestException {
         if (rs != null) {
             if (rs.size() <= 1) {
-                LOG.info("Only one item returned - is this the end? ");
+                LOG.debug("Only one item returned - is this the end of the run?");
+                complete = true;
             }
 
             LOG.debug(String.format("Starting with a batch of %d documents", rs.size()));
